@@ -1,6 +1,6 @@
 ---
-description: Nastaví docs-plugin strukturu v repozitáři (docs/, tasks/, CLAUDE.md, AGENTS.md, .cursor/rules). Default zero-question setup s autodetekcí.
-argument-hint: "[--force] [--ticket-system=jira|linear|github|none] [--platforms=cc,codex,cursor,gemini] [--lang=cs|en] [--no-detect]"
+description: Nastaví docs-plugin strukturu v repozitáři + autodetekce + bulk generování DESCRIPTION.md napříč moduly.
+argument-hint: "[--force] [--ticket-system=jira|linear|github|none] [--platforms=cc,codex,cursor,gemini] [--lang=cs|en] [--no-detect] [--no-bulk] [--bulk] [--max-modules=N] [--concurrency=N] [--dry-run]"
 ---
 
 # /docs-init
@@ -219,7 +219,227 @@ tasks/*/*/.working/
 
 Pokud neexistuje, vytvoř ho s touto hlavičkou.
 
-## 6. Summary
+## 6. Bulk discovery + generování DESCRIPTION.md
+
+**Cíl:** po vytvoření kostry rovnou vygeneruj `DESCRIPTION.md` pro všechny smysluplné moduly v repu, aby uživatel po skončení `/docs-init` měl něco, co Claude Code může reálně číst — ne prázdné šablony.
+
+Tento krok běží **defaultně** (pokud user nepassnul `--no-bulk`). Pokud user passne `--no-bulk`, přeskoč na sekci 7. Pokud user passne `--dry-run`, vypiš plán bez zápisu.
+
+### 6.1 Discovery — najdi kandidáty na moduly
+
+Heuristika je **mechanická a deterministická** — žádné LLM rozhodování o tom, co je modul. Použij filesystem:
+
+```bash
+# Pseudokód — implementuj přes Glob / Bash
+extensions = vyber_přípony_podle_detekovaného_stacku()
+# např. TypeScript: ts,tsx; Python: py; Rust: rs; Go: go; .NET: cs
+
+candidates = []
+for dir in walk(<source_root>, max_depth=6):
+    if dir matches blacklist: continue
+    files = list_files(dir, extensions, non_recursive=True)
+    if len(files) >= 3:
+        candidates.append(dir)
+```
+
+**Blacklist** (vždy vynech):
+
+```
+node_modules, dist, build, out, target, .next, .nuxt, .svelte-kit,
+__pycache__, .pytest_cache, .mypy_cache, .ruff_cache,
+vendor, .venv, venv, env, .env,
+bin, obj, .git, .vs, .idea, .vscode,
+coverage, .coverage, .nyc_output,
+.docs-revise-backup, .doc-update-cache,
+docs, tasks  # docs-plugin's own structure
+```
+
+**Extension mapping** podle detekovaného stacku:
+
+| Stack | Extensions |
+|---|---|
+| TypeScript | `.ts`, `.tsx`, `.mts`, `.cts` (NE `.d.ts`) |
+| JavaScript | `.js`, `.jsx`, `.mjs`, `.cjs` |
+| Python | `.py` (NE `__init__.py` jako jediný soubor) |
+| Rust | `.rs` |
+| Go | `.go` (NE `*_test.go` jako primární) |
+| .NET | `.cs` |
+| Ruby | `.rb` |
+| PHP | `.php` |
+
+**Test složky** (`__tests__/`, `*.test.*`, `tests/`, `*Tests/`) jsou samostatný kandidát **jen pokud** mají >10 souborů. Jinak skip — testy popisuje DESCRIPTION.md v parent modulu zmínkou *"Tests in __tests__/"*.
+
+### 6.2 Triage — priority score
+
+Každý kandidát dostane skóre. Vyšší skóre = vyšší priorita.
+
+```
+priority_score(dir) =
+    + 100 × (1 if is_top_level_package else 0)         # src/Billing/ vs src/Billing/Sub/
+    + 10 × public_exports_count                         # rough scan: `export`, `pub`, `public`
+    + 5 × (10 - depth_from_source_root)                 # bližší root = vyšší
+    + 1 × source_files_count                            # větší modul = větší score
+```
+
+Top-level package = první úroveň pod `<source_root>`. Public exports count = rough grep:
+
+- TS/JS: `^export\b` (bez `export *`, bez `export type` jen jako augment)
+- Python: top-level `def `, `class ` (bez podtržítka), `__all__` entries
+- Rust: `^pub `
+- Go: capitalized func/type/var na top-level
+- C#: `^\s*public\s+(class|interface|record|enum|struct)`
+
+Nemusí to být přesné — je to **jen pro triage**. Subagent později spočítá přesný `api_hash`.
+
+### 6.3 Token budget + confirmation
+
+Před spuštěním subagentů odhadni cost:
+
+```
+modules = top_N_candidates_by_priority(default N=20)
+estimated_input_tokens  = len(modules) × 5_000   # přečtení zdrojáků modulu
+estimated_output_tokens = len(modules) × 2_000   # DESCRIPTION.md content
+```
+
+**Pravidlo na zeptání:**
+
+| Počet modulů | Co dělat |
+|---|---|
+| ≤ 30 | proceed bez ptaní |
+| 31–100 | zeptej se JEDNOU: *"Najdeno 47 modulů, odhad ~330k input tokenů. Generovat všechny? [Y/n] / Limit počet (--max-modules=N)"* |
+| > 100 | zeptej se JEDNOU + doporuč `--max-modules=20` jako default |
+
+Při `--dry-run`: vypiš seznam (cesta + score + odhad tokenů per modul) a skonči.
+
+Při `--max-modules=N`: ber jen prvních N podle priority. Zbytek vypiš se zprávou:
+
+```
+Wygenerováno 20 z 47 modulů. Zbývá 27 — pro ně spusť:
+  /doc-update --all
+nebo cíleně: /doc-update <path>
+```
+
+### 6.4 Generate — paralelní subagent batch
+
+Spusť `docs-updater` subagent **paralelně v batchích** podle `--concurrency=N` (default `5`).
+
+**Implementace v Claude Code:** v jedné assistant zprávě udělej `--concurrency` Agent tool calls naráz (parallel tool execution). Po jejich dokončení batch další. Tj. `concurrency=5` znamená: 5 subagentů současně, čekat na všechny, další batch.
+
+Každý subagent dostává prompt:
+
+```
+Aktualizuj dokumentaci pro adresář: <path>
+Mode: revize (modul ještě nemá DESCRIPTION.md → kompletní generace)
+Tech stack: <z autodetekce 3.1>
+Jazyk dokumentace: <z autodetekce 3.3>
+Include docs/modules/: ne (řeší orchestrátor v 6.5)
+Include api_hash: ano
+
+Hard rules:
+- Žádný changelog (viz skill rules)
+- Drž frontmatter schema (type: description, module, status, api_hash, last_updated)
+- Pokud kód nemá doc komentáře, vrať to v summary, NIKDY nehalucinuj chování
+```
+
+Subagent vrátí summary; orchestrátor nad ním nedělá další volání modelu — jen agreguje texty pro finální report.
+
+**Failed module** (subagent vrátí chybu, time-out, prázdný DESCRIPTION.md): zaznamenej do "skipped" listu, pokračuj dál. Po doběhnutí všech batches vypiš:
+
+```
+✗ Selhalo: 2/20 modulů
+  - src/Legacy/Foo (subagent timeout)
+  - src/Internal/Bar (žádné public symboly — přeskočeno)
+```
+
+### 6.5 Aggregate — MODULES.md a docs/modules/<X>/README.md
+
+Po dokončení všech subagentů (úspěšných i selhalých) vygeneruj agregáty **bez dalších subagent volání** — orchestrátor sám čte vygenerované DESCRIPTION.md a sklíží je.
+
+#### MODULES.md per top-level package
+
+Pro každý top-level package (= každá první-úrovňová složka pod `<source_root>`) vytvoř `<package>/MODULES.md`:
+
+```markdown
+---
+type: modules-overview
+module: <path>
+status: active
+last_updated: <YYYY-MM-DD>
+---
+
+# <PackageName> Modules
+
+| Namespace | Popis |
+|---|---|
+| `<sub1>` | <první věta z DESCRIPTION.md sub1> |
+| `<sub2>` | <první věta z DESCRIPTION.md sub2> |
+
+Viz `DESCRIPTION.md` v každé podsložce pro detaily.
+```
+
+První věta z DESCRIPTION.md = úvodní odstavec po nadpise modulu (ten, co píše subagent jako jednovětný popis modulu).
+
+#### docs/modules/<X>/README.md
+
+Pro **každý top-level package**, který má >2 sub-moduly, vytvoř `docs/modules/<X>/README.md` jako konceptuální popis:
+
+- Path mapping: `src/Billing/` → `docs/modules/billing/` (lowercase, `/` separator)
+- Pro hluboké moduly: `src/Billing/Invoicing/` → `docs/modules/billing/modules/invoicing/`
+- Obsah: vytáhni "Co tady žije" sekce z DESCRIPTION.md sub-modulů a sklíž do high-level popisu
+
+Šablona:
+
+```markdown
+---
+type: module-readme
+module: <PackageName>
+status: active
+last_updated: <YYYY-MM-DD>
+---
+
+# <PackageName>
+
+<Krátký popis — 1-2 odstavce. Sklížený z úvodních popisů DESCRIPTION.md submodulů.>
+
+## Submoduly
+
+- **<Sub1>** — <první věta z jejich DESCRIPTION.md>
+- **<Sub2>** — ...
+
+## Hlavní integrace
+
+<Vytaž ze sekcí "Integrace" submodulů — co publikuje / konzumuje. Jen pokud aspoň 2 submoduly to mají.>
+
+## Detaily
+
+- Architektura: `architecture/` (vytvoř prázdnou kostru, pokud nemá)
+- Reference: `reference/` (vytvoř prázdnou kostru, pokud nemá)
+- API: `DESCRIPTION.md` v každé src/ složce
+```
+
+**NEVOLEJ subagent** pro tuhle agregaci. Orchestrátor (= ty, hlavní agent) má všechny DESCRIPTION.md v kontextu po batch run a může je zkompilovat.
+
+### 6.6 Bulk summary
+
+Po skončení 6.4 + 6.5 přidej do hlavního summary (sekce 7) blok:
+
+```
+Bulk discovery:
+  • Kandidátů nalezeno:    47 modulů (15 top-level package, 32 sub-modulů)
+  • Generováno:            20 (top 20 podle priority)
+  • Přeskočeno:            27 (limit --max-modules; pro zbytek: /doc-update --all)
+  • Selhání:                2 (viz výše)
+
+Vytvořené soubory:
+  • 20 × DESCRIPTION.md
+  • 4 × MODULES.md (top-level packages)
+  • 8 × docs/modules/<X>/README.md (s ≥3 sub-moduly)
+
+Token cost (odhad):
+  • Input:  ~104k    Output: ~38k
+```
+
+## 7. Summary
 
 Vypiš jednou stručný blok, který říká uživateli, **co jsi detekoval** a **jak to může přepsat**:
 
@@ -277,6 +497,8 @@ Pokud nejsi jistý (typicky: ambiguous tech stack, žádný git history), **zobr
 
 ## 8. Argumenty (override)
 
+### Konfigurace (autodetekce)
+
 - `--force` — přepíš existující substrate soubory (používej opatrně)
 - `--ticket-system=jira|linear|github|none` — override autodetekce
 - `--platforms=cc,codex,cursor,gemini` — čárkou oddělený seznam (override)
@@ -285,6 +507,16 @@ Pokud nejsi jistý (typicky: ambiguous tech stack, žádný git history), **zobr
 
 Při kombinaci flagu + autodetekce: flag vyhrává pro své pole, ostatní pole se detekují normálně.
 
+### Bulk discovery + generování (sekce 6)
+
+- `--bulk` — explicitně zapni bulk (default chování, flag není potřeba)
+- `--no-bulk` — přeskoč bulk discovery; jen vytvoř kostru a skonči
+- `--max-modules=N` — limit počtu generovaných modulů v prvním běhu (default 20, zbytek se pak doplní přes `/doc-update --all`)
+- `--concurrency=N` — počet paralelně běžících `docs-updater` subagentů (default 5)
+- `--dry-run` — vypiš plán (kandidáty, prioritu, odhad tokenů) a skonči bez zápisu
+
 ## 9. Backwards compatibility
 
-Stejné argumenty jako ve verzi před autodetekcí (`--force`, `--ticket-system`, `--platforms`, `--lang`) **se chovají stejně**. Když uživatel passne všechny tyhle flagy, autodetekce se prakticky neuplatní — chová se jako stará verze.
+- Stejné argumenty jako ve verzi před autodetekcí (`--force`, `--ticket-system`, `--platforms`, `--lang`) **se chovají stejně**. Passne-li je uživatel všechny, autodetekce se prakticky neuplatní.
+- Bulk discovery (sekce 6) je nová, ale `--no-bulk` ji vypne — pak je chování ekvivalentní původnímu „udělej kostru, neuglej obsah".
+- Jediná breaking změna proti původnímu chování: bez flagů se teď rovnou generuje DESCRIPTION.md napříč moduly. Pokud to user nechce, řekne `--no-bulk`.
