@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "softmedia",
+  "version": "0.1.0",
+  "description": "Plugin marketplace by Softmedia.cz — currently hosting docs-plugin (strukturovaná dokumentace pro Claude Code podle metodiky docs-process).",
+  "owner": {
+    "name": "Softmedia.cz",
+    "email": "vlasak@softmedia.cz"
+  },
+  "plugins": [
+    {
+      "name": "docs-plugin",
+      "source": "./",
+      "description": "Substrát pro strukturovanou dokumentaci v repozitářích. Odděluje AS IS (docs/) od TO BE (tasks/), škáluje rekurzivně. Skill, subagent docs-updater, slash commandy /docs-init, /doc-update, /doc-revise.",
+      "version": "0.1.0"
+    }
+  ]
+}

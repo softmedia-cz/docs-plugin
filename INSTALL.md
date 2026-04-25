@@ -4,13 +4,14 @@
 
 ### Claude Code (primární cílová platforma)
 
-```bash
-# Lokální instalace z cloned repa
-git clone <repo-url> /path/to/docs-plugin
-claude plugin install /path/to/docs-plugin
+Plugin je distribuovaný přes vlastní marketplace v tomtéž repu. Postup je dvoukrokový — nejdřív přidat marketplace, pak instalovat plugin.
 
-# Nebo přímo z GitHubu (až bude published)
-claude plugin install softmedia/docs-plugin
+```bash
+# 1) Přidej marketplace (jednorázově)
+claude plugin marketplace add softmedia-cz/docs-plugin
+
+# 2) Nainstaluj plugin
+claude plugin install docs-plugin
 ```
 
 Ověř instalaci:
@@ -20,6 +21,16 @@ claude plugin list | grep docs-plugin
 ```
 
 V libovolném repu pak pusť `/docs-init` pro prvotní nastavení.
+
+#### Lokální instalace (vývoj pluginu samotného)
+
+Pokud na pluginu pracuješ a chceš ho zkoušet z lokálního checkoutu:
+
+```bash
+git clone https://github.com/softmedia-cz/docs-plugin.git /path/to/docs-plugin
+claude plugin marketplace add /path/to/docs-plugin
+claude plugin install docs-plugin
+```
 
 ### Codex / Gemini / Cursor (sekundární)
 

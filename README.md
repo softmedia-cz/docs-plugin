@@ -25,13 +25,19 @@ Plugin automatizuje dokumentační workflow podle metodiky `docs-process`, ktero
 
 ### Claude Code
 
-```bash
-# Z GitHubu (až bude published)
-claude plugin install https://github.com/softmedia/docs-plugin
+Plugin je distribuovaný přes vlastní marketplace v tomtéž repu — nejdřív přidat marketplace, pak instalovat plugin:
 
-# Nebo lokálně (aktuální varianta)
-git clone <repo> /tmp/docs-plugin
-claude plugin install /tmp/docs-plugin
+```bash
+claude plugin marketplace add softmedia-cz/docs-plugin
+claude plugin install docs-plugin
+```
+
+Lokální vývoj (z naklonovaného checkoutu):
+
+```bash
+git clone https://github.com/softmedia-cz/docs-plugin.git /path/to/docs-plugin
+claude plugin marketplace add /path/to/docs-plugin
+claude plugin install docs-plugin
 ```
 
 Po instalaci:
