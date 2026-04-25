@@ -1,0 +1,33 @@
+{
+  "//": "Volitelné docs-plugin hooky pro Claude Code. Nainstaluj přes /docs-init --install-hooks nebo zkopíruj ručně do .claude/settings.json.",
+  "//hooks-purpose": "SessionStart subtilně připomene, kolik modulů má drift; Stop varuje po editech v src/, že je drift a navrhne /doc-update --all.",
+  "//caveat": "Hooky jsou volitelné — můžou rozbít CI / non-interaktivní běhy, pokud je tam aktivní settings.json. Vždy testuj v interaktivní session, než nasadíš sdíleně.",
+
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude /doc-status --quiet --output=json 2>/dev/null | jq -r 'if (.drifted // 0) + (.missing // 0) > 0 then \"💡 docs-plugin: \\(.drifted) modulů v driftu, \\(.missing) chybí. Spusť /doc-update --all pro opravu.\" else empty end'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if git rev-parse --git-dir >/dev/null 2>&1; then edits=$(git diff --name-only HEAD 2>/dev/null | grep -cE '^(src|app|lib|packages)/' || true); if [ \"$edits\" -gt 0 ]; then claude /doc-status --quiet --output=json 2>/dev/null | jq -r 'if (.drifted // 0) + (.missing // 0) > 0 then \"💡 Po editech v zdrojácích je \\(.drifted) modulů v driftu, \\(.missing) chybí dokumentace. Doporučuji spustit /doc-update --all.\" else empty end'; fi; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

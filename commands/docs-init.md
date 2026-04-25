@@ -1,6 +1,6 @@
 ---
 description: Nastaví docs-plugin strukturu v repozitáři + autodetekce + bulk generování DESCRIPTION.md napříč moduly.
-argument-hint: "[--force] [--ticket-system=jira|linear|github|none] [--platforms=cc,codex,cursor,gemini] [--lang=cs|en] [--no-detect] [--no-bulk] [--bulk] [--max-modules=N] [--concurrency=N] [--dry-run]"
+argument-hint: "[--force] [--ticket-system=jira|linear|github|none] [--platforms=cc,codex,cursor,gemini] [--lang=cs|en] [--no-detect] [--no-bulk] [--bulk] [--max-modules=N] [--concurrency=N] [--dry-run] [--install-hooks] [--no-hooks]"
 ---
 
 # /docs-init
@@ -419,6 +419,28 @@ last_updated: <YYYY-MM-DD>
 
 **NEVOLEJ subagent** pro tuhle agregaci. Orchestrátor (= ty, hlavní agent) má všechny DESCRIPTION.md v kontextu po batch run a může je zkompilovat.
 
+### 6.7 Volitelné: install hooks
+
+Pokud user passnul `--install-hooks` (nebo na interaktivní otázku odpověděl ano), nainstaluj `templates/settings.json` šablonu do `<repo>/.claude/settings.json`. Hooky:
+
+- **SessionStart hook** — při startu session vypíše subtilní reminder, pokud nějaké moduly jsou v driftu (`💡 docs-plugin: 7 modulů v driftu...`).
+- **Stop hook** — po skončení session, pokud byly edity v `src/`/`app/`/`lib/`/`packages/`, varuje na drift a navrhne `/doc-update --all`.
+
+**NEINSTALUJ hooky automaticky.** Default chování `/docs-init` je hooky **neinstalovat**, protože:
+
+- Můžou rozbít CI / non-interaktivní běhy (`claude --print` apod.).
+- Volání `claude /doc-status` z hooku spustí novou session — uživatel musí být ochotný za to platit (token cost minimální, ale nekontrolované volání může překvapit).
+- Rozdělení zodpovědnosti: drift detekce může být i v pre-commit hooku (viz `templates/hooks/pre-commit-doc-update`), CI lintu, nebo jen manuálně přes `/doc-status`.
+
+Postup pro instalaci:
+
+1. **Pokud `<repo>/.claude/settings.json` neexistuje**: zkopíruj šablonu z `templates/settings.json` (placeholdery není potřeba nahrazovat — settings.json je generic).
+2. **Pokud existuje**: **nemerguj automaticky**. Vypiš uživateli obsah šablony a poraď: *"Existující `.claude/settings.json` jsem nepřepsal. Šablonu najdeš v `<plugin>/templates/settings.json`, případně si ručně doplň `hooks.SessionStart` a `hooks.Stop` sekce."*
+
+Pokud user passnul `--no-hooks`, **nezeptej se** ani interaktivně — respektuj explicitní volbu.
+
+V interaktivním módu (žádný flag) **se zeptej** na konci `/docs-init`: *"Nainstalovat volitelné hooky pro drift reminders v session start/stop? [y/N]"* — default `N` (bezpečnější).
+
 ### 6.6 Bulk summary
 
 Po skončení 6.4 + 6.5 přidej do hlavního summary (sekce 7) blok:
@@ -514,6 +536,13 @@ Při kombinaci flagu + autodetekce: flag vyhrává pro své pole, ostatní pole 
 - `--max-modules=N` — limit počtu generovaných modulů v prvním běhu (default 20, zbytek se pak doplní přes `/doc-update --all`)
 - `--concurrency=N` — počet paralelně běžících `docs-updater` subagentů (default 5)
 - `--dry-run` — vypiš plán (kandidáty, prioritu, odhad tokenů) a skonči bez zápisu
+
+### Hooky (sekce 6.7)
+
+- `--install-hooks` — nainstaluj `templates/settings.json` do `<repo>/.claude/settings.json` (SessionStart + Stop drift reminders)
+- `--no-hooks` — vypni interaktivní dotaz na hooky; nainstaluj NIC
+
+Bez flagu se v interaktivním módu commandy zeptá *"Nainstalovat hooky? [y/N]"* (default N).
 
 ## 9. Backwards compatibility
 
