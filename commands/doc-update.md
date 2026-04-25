@@ -1,13 +1,28 @@
 ---
-description: Inkrementálně aktualizuje docs-plugin dokumentaci pro daný adresář (DESCRIPTION.md, MODULES.md, docs/modules/*/README.md)
-argument-hint: "<path> [--include-docs-modules] [--no-api-hash]"
+description: Inkrementálně aktualizuje docs-plugin dokumentaci. S argumentem cesty pracuje na konkrétním modulu, bez argumentu (nebo s --all) prohledá celý repo na drift a opraví zastaralé moduly paralelně.
+argument-hint: "[<path> | --all] [--include-docs-modules] [--no-api-hash] [--auto] [--yes] [--concurrency=N] [--dry-run]"
 ---
 
 # /doc-update
 
-Inkrementálně aktualizuj dokumentaci pro zadaný adresář. **Nesmí psát changelog** — popisuje jen aktuální stav kódu.
+Inkrementálně aktualizuj dokumentaci. **Nesmí psát changelog** — popisuje jen aktuální stav kódu.
 
-## Co tento command dělá
+Dva režimy:
+
+1. **Targeted** — `/doc-update <path>` aktualizuje jen jeden modul (legacy chování, beze změny).
+2. **Driftscan** — `/doc-update` (bez argumentu) nebo `/doc-update --all` prohledá repo, najde moduly s `api_hash` driftem proti kódu, a paralelně je opraví.
+
+## Vstup
+
+- `<path>` — relativní cesta k adresáři se zdrojáky (volitelný; bez něj/s `--all` běží driftscan)
+- `--all` — explicitně vyžádá driftscan (ekvivalent absence `<path>`)
+- `--include-docs-modules` — zahrň aktualizaci `docs/modules/<X>/README.md` (default: ano, pokud existuje)
+- `--no-api-hash` — nevypočítej `api_hash` (default: počítej)
+- `--auto` / `--yes` — driftscan: oprav vše bez ptaní (vhodné pro hooky/CI)
+- `--concurrency=N` — driftscan: počet paralelně běžících `docs-updater` subagentů (default 5)
+- `--dry-run` — driftscan: vypiš seznam driftnutých modulů, neopravuj
+
+## Co tento command dělá (targeted mode)
 
 1. Ověří, že repo má docs-plugin strukturu (pokud ne, poradí `/docs-init`)
 2. Zanalyzuje zdrojáky v `<path>`
@@ -16,13 +31,42 @@ Inkrementálně aktualizuj dokumentaci pro zadaný adresář. **Nesmí psát cha
 5. Aktualizuje `docs/modules/<X>/README.md` (pokud existuje odpovídající modul v docs)
 6. Reportuje, co se změnilo
 
-## Vstup
+## Co tento command dělá (driftscan mode — bez `<path>` nebo s `--all`)
 
-- `<path>`: relativní cesta k adresáři se zdrojáky (povinný)
-- `--include-docs-modules`: zahrň aktualizaci `docs/modules/<X>/README.md` (default: ano, pokud existuje)
-- `--no-api-hash`: nevypočítej `api_hash` (default: počítej)
+1. Najde všechny `DESCRIPTION.md` v repu (vyjma `templates/`, `node_modules/`, atd. — viz blacklist v `/docs-init` sekce 6.1).
+2. Pro každý spočítá `current_api_hash` ze zdrojáků vedle (stejný algoritmus jako v `/docs-init` 6.4).
+3. Porovná s `api_hash` ve frontmatteru. Pokud `current != stored` → modul je v driftu.
+4. Vypíše seznam driftnutých modulů (cesta + starý/nový hash + počet změněných symbolů).
+5. **Bez `--auto/--yes`** se zeptá: *"Najdeno 8 driftnutých modulů. Opravit všechny / vybrat / přerušit? [A/v/c]"*. Při výběru *vybrat* nabídne checkbox-style seznam.
+6. **S `--auto/--yes`** rovnou opraví všechny.
+7. Při `--dry-run` vypíše jen seznam a skončí.
+8. Oprava: spustí `docs-updater` subagent paralelně v batchích `--concurrency` (stejný pattern jako `/docs-init` bulk).
 
-## Postup
+### Driftscan output
+
+```
+✓ /doc-update --all  (driftscan)
+
+Prohledáno: 47 modulů
+V driftu:    8
+
+Driftnuté moduly (sortováno podle počtu změn):
+  src/Billing/Invoicing       12 změn  (a7f3c9 → b2e8f1)
+  src/Auth/Tokens              7 změn  (e4d21a → 8c1f04)
+  src/Common/Validation        3 změny (5d8a2b → 5d8a2b -- malá změna komentářů)
+  ...
+
+→ Pokračuju opravou. (--auto)
+→ Spouštím docs-updater subagent (concurrency=5)...
+
+Po opravě:
+  ✓ 7/8 opraveno
+  ✗ 1/8 selhalo: src/Legacy/Foo (subagent timeout, viz logy)
+
+Spusť `/doc-status` pro ověření.
+```
+
+## Postup (targeted mode)
 
 ### 1. Deleguj na `docs-updater` subagent
 
@@ -81,6 +125,84 @@ Najdi odpovídající modul v `docs/modules/`:
 ### 5. Kontrola změn AGENTS.md / CLAUDE.md
 
 Command `/doc-update` **neupravuje** `CLAUDE.md` ani `AGENTS.md`. Pokud na základě skenu zjistíš, že se přidala nová platforma (třeba Cursor) nebo nová konvence, reportuj to uživateli s doporučením, že by to chtělo probrat ručně.
+
+## Postup (driftscan mode)
+
+Spouští se bez `<path>` nebo s `--all`.
+
+### 1. Najdi všechny `DESCRIPTION.md`
+
+Glob přes celý repo, bez blacklistu (`templates/`, `node_modules/`, `dist/`, `build/`, `target/`, `.venv/`, `__pycache__/`, `vendor/`, `.git/`, `.docs-revise-backup/`):
+
+```bash
+# Pseudokód
+descriptions = glob("**/DESCRIPTION.md", exclude=blacklist)
+```
+
+### 2. Pro každý spočítej `current_api_hash`
+
+Stejný algoritmus jako v `agents/docs-updater.md` sekci 7:
+
+1. Skenuj zdrojáky vedle (`<dir of DESCRIPTION.md>/*.{detected_extensions}`)
+2. Najdi veřejné symboly + signatury
+3. Seřaď, normalizuj, SHA-256:
+   ```bash
+   printf '%s' "<serialized>" | { command -v sha256sum >/dev/null && sha256sum || shasum -a 256; } | cut -c1-12
+   ```
+
+### 3. Porovnej
+
+Načti `api_hash` z frontmatteru DESCRIPTION.md. Drift = `current != stored`.
+
+Speciální případy:
+
+- DESCRIPTION.md neexistuje, ale složka má veřejné API → **drift** (kategorie *missing*)
+- DESCRIPTION.md existuje, ale složka už neobsahuje zdrojáky → **drift** (kategorie *orphaned*)
+- DESCRIPTION.md má `status: deprecated` → skip (úmyslně neaktualizujeme)
+
+### 4. Report driftnutých
+
+Vypiš seznam, sortovaný podle počtu změn (pokud lze rychle odhadnout) nebo podle priority modulu:
+
+```
+V driftu (8 modulů):
+  1. src/Billing/Invoicing       12 změn   (a7f3c9 → b2e8f1)
+  2. src/Auth/Tokens               7 změn   (e4d21a → 8c1f04)
+  ...
+  Missing DESCRIPTION.md (2):
+  - src/NewModule
+  - src/AnotherNew
+  Orphaned (1):
+  - src/RemovedModule (DESCRIPTION.md existuje, kód zmizel)
+```
+
+### 5. Konfirmace
+
+- **`--auto` nebo `--yes`** → proceed bez ptaní (vhodné pro hooky/CI).
+- **`--dry-run`** → skonči po vypsání seznamu, neopravuj.
+- **Bez flagu** → zeptej se: *"Opravit všechny / vybrat / přerušit? [A/v/c]"*. Při *vybrat* nabídni interaktivní výběr (model si vyrobí seznam s indexy).
+
+### 6. Oprava — paralelní subagent batch
+
+Stejný pattern jako `/docs-init` 6.4:
+
+- `docs-updater` subagent v batchích `--concurrency` (default 5)
+- Mode pro každý: *inkrementální* (existující DESCRIPTION.md) nebo *revize* (missing DESCRIPTION.md)
+- Failed moduly se zaznamenají, neabortuje to celý běh
+
+### 7. Po-oprava report
+
+Doporuč `/doc-status` pro ověření, že drift je vyřešen.
+
+### Orphaned moduly
+
+Modul s DESCRIPTION.md ale bez zdrojáků **nemažeme** automaticky — to je zóna lidského rozhodnutí (možná čeká na refactor, možná je to chyba). V driftscan reportu jen upozorni:
+
+```
+⚠ Orphaned: src/RemovedModule
+  DESCRIPTION.md existuje, ale ve složce nejsou zdrojáky.
+  Ručně rozhodni: smazat DESCRIPTION.md, nebo obnovit kód.
+```
 
 ## Output format
 
