@@ -1,0 +1,24 @@
+{
+  "name": "docs-plugin",
+  "version": "0.1.0",
+  "description": "Substrát pro strukturovanou dokumentaci v repozitářích. Odděluje AS IS (docs/) od TO BE (tasks/), škáluje rekurzivně od malých projektů po multimilionové codebase. Skill, subagent docs-updater, slash commandy /docs-init, /doc-update, /doc-revise.",
+  "keywords": [
+    "documentation",
+    "docs",
+    "docs-plugin",
+    "claude-code",
+    "skill",
+    "subagent",
+    "as-is",
+    "to-be"
+  ],
+  "author": {
+    "name": "Softmedia.cz",
+    "url": "https://softmedia.cz"
+  },
+  "homepage": "https://github.com/softmedia-cz/docs-plugin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/softmedia-cz/docs-plugin.git"
+  }
+}

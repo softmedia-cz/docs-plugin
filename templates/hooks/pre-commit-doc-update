@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+#
+# pre-commit-doc-update — vzorový pre-commit hook pro docs-substrate.
+#
+# Spustí /doc-update na všechny adresáře, ve kterých se mění zdrojáky,
+# a přidá vygenerované úpravy `DESCRIPTION.md` / `MODULES.md` do commitu.
+#
+# Instalace:
+#   cp templates/hooks/pre-commit-doc-update .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Pre-requisites:
+#   - claude CLI v PATH (Claude Code) NEBO codex CLI s prompt šablonami v .codex/prompts/
+#   - Plugin docs-substrate nainstalovaný (claude plugin install ...)
+#
+# Tento hook je opt-in. Pokud ho nechcete, smažte ho z .git/hooks/.
+
+set -euo pipefail
+
+# --- Konfigurace ------------------------------------------------------------
+
+# Kořenové adresáře se zdrojáky, ve kterých sledovat změny.
+# Doplň podle svého repa.
+SOURCE_ROOTS=("src" "app" "lib" "packages")
+
+# Který nástroj použít: "claude" (Claude Code) nebo "codex" (Codex CLI).
+# Default: auto-detekce podle toho, co je v PATH.
+DOC_TOOL="${DOCS_SUBSTRATE_TOOL:-auto}"
+
+# Skip hook, pokud se commituje jen do `tasks/`, `docs/` nebo `.md` souborů
+# (žádné zdrojáky nebyly dotčeny).
+SKIP_IF_NO_CODE_CHANGES=true
+
+# --- Detekce nástroje -------------------------------------------------------
+
+if [ "$DOC_TOOL" = "auto" ]; then
+  if command -v claude >/dev/null 2>&1; then
+    DOC_TOOL="claude"
+  elif command -v codex >/dev/null 2>&1; then
+    DOC_TOOL="codex"
+  else
+    echo "pre-commit-doc-update: ani claude ani codex není v PATH — přeskakuju." >&2
+    exit 0
+  fi
+fi
+
+# --- Najdi dotčené adresáře -------------------------------------------------
+
+# Staged změněné soubory (Added, Copied, Modified)
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+# Filtr: jen zdrojáky pod SOURCE_ROOTS, žádné `.md` soubory.
+matched=""
+for f in $staged; do
+  case "$f" in
+    *.md) continue ;;
+  esac
+  for root in "${SOURCE_ROOTS[@]}"; do
+    case "$f" in
+      "$root"/*) matched="$matched$f"$'\n'; break ;;
+    esac
+  done
+done
+
+if [ -z "$matched" ]; then
+  if [ "$SKIP_IF_NO_CODE_CHANGES" = "true" ]; then
+    exit 0
+  fi
+fi
+
+# Unikátní adresáře, ve kterých došlo ke změně.
+dirs=$(printf '%s' "$matched" | xargs -I{} dirname {} | sort -u)
+
+# --- Spusť doc-update -------------------------------------------------------
+
+for dir in $dirs; do
+  echo "pre-commit-doc-update: aktualizuju dokumentaci pro $dir"
+
+  case "$DOC_TOOL" in
+    claude)
+      claude --no-interactive --command "/doc-update $dir" || {
+        echo "pre-commit-doc-update: doc-update selhal pro $dir, commit nepokračuje" >&2
+        exit 1
+      }
+      ;;
+    codex)
+      if [ ! -f .codex/prompts/doc-update.md ]; then
+        echo "pre-commit-doc-update: .codex/prompts/doc-update.md neexistuje — pusť /docs-init nebo zkopíruj ze šablony." >&2
+        exit 1
+      fi
+      codex "$(cat .codex/prompts/doc-update.md) $dir" || {
+        echo "pre-commit-doc-update: doc-update selhal pro $dir" >&2
+        exit 1
+      }
+      ;;
+  esac
+
+  # Auto-stage vygenerované změny v dokumentaci.
+  for md in "$dir/DESCRIPTION.md" "$dir/../MODULES.md"; do
+    if [ -f "$md" ] && ! git diff --cached --quiet -- "$md" 2>/dev/null; then
+      :
+    fi
+    if [ -f "$md" ] && ! git diff --quiet -- "$md" 2>/dev/null; then
+      git add "$md"
+    fi
+  done
+done
+
+exit 0

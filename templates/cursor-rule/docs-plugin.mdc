@@ -1,0 +1,111 @@
+---
+description: docs-plugin — strukturovaná dokumentace AS IS / TO BE, zákaz changelog driftu
+globs:
+  - "docs/**"
+  - "tasks/**"
+  - "**/DESCRIPTION.md"
+  - "**/MODULES.md"
+  - "CLAUDE.md"
+  - "AGENTS.md"
+alwaysApply: false
+---
+
+# docs-plugin (Cursor rule)
+
+Tento repozitář používá [docs-plugin](https://github.com/softmedia/docs-plugin). Když pracuješ s dokumentací, dodržuj tato pravidla.
+
+## Hard rules
+
+1. **`docs/` = AS IS** (aktuální stav systému). Aktualizuje se při mergi.
+2. **`tasks/<EPIC>/<TASK>/` = TO BE** (plánované změny, cold storage). Nečti proaktivně.
+3. **Žádný changelog v `docs/`.** Neexistují věty „was changed", „previously", „was X, now Y". Pokud máš nutkání takové napsat, přepiš tak, aby popisovala jen aktuální stav.
+4. **`DESCRIPTION.md`** v každé složce se zdrojáky (netriviálních).
+5. **`MODULES.md`** v každém top-level balíčku (auto-generovaný, neupravuj ručně).
+6. **Rekurzivní struktura** `docs/modules/<X>/modules/<Y>/`.
+7. **YAML frontmatter** v každém substrate-konformním `.md` souboru.
+
+## Typické operace
+
+### Aktualizace DESCRIPTION.md po změně kódu
+
+Když jsi změnil veřejné API v `<path>`:
+
+1. Projdi zdrojáky v `<path>` a najdi veřejné symboly
+2. Aktualizuj sekce „Co tady žije" a „Veřejné API" v `<path>/DESCRIPTION.md`
+3. Spočítej `api_hash` (SHA-256 prvních 12 znaků serializovaných veřejných signatur)
+4. Ulož do frontmatter, aktualizuj `last_updated`
+5. Pokud existuje `<path>/../MODULES.md`, aktualizuj i tam
+6. Pokud existuje `docs/modules/<X>/README.md`, aktualizuj konceptuální popis
+
+**NIKDY nepiš do DESCRIPTION.md věty o historii změn.** To patří do git commit messages.
+
+### Nový task
+
+Vytvoř adresář `tasks/<EPIC-KEY>/<TASK-KEY>/` se soubory:
+
+- `assignment.md` — co a proč
+- `plan.md` — jak to budu dělat
+- `changelog.md` — průběžný záznam provedených změn
+
+Klíče se shodují s ticketovacím systémem. Commituje se všechno.
+
+### Hledání v docs/
+
+- Architektura → `docs/architecture/`
+- Funkční popis → `docs/reference/`
+- Konkrétní modul → `docs/modules/<module>/`
+- Co dělá tenhle kód → `DESCRIPTION.md` vedle kódu
+- Rozhodnutí → `docs/architecture/decisions/`
+
+Nepoužívej globální search napříč `docs/` — místo toho jdi po stromu modulů podle konvence.
+
+## Frontmatter příklady
+
+### DESCRIPTION.md
+
+```yaml
+---
+type: description
+module: src/Billing/Invoicing
+status: active
+api_hash: a7f3c9d2e5b8
+last_updated: 2026-04-22
+---
+```
+
+### docs/modules/<X>/README.md
+
+```yaml
+---
+type: module-readme
+module: Billing
+status: active
+last_updated: 2026-04-22
+---
+```
+
+### tasks/<EPIC>/<TASK>/assignment.md
+
+```yaml
+---
+type: task-assignment
+epic: CF-100-EPIC
+task: CF-142
+status: in-progress
+ticket_url: https://...
+---
+```
+
+## Tipy pro Composer
+
+- Když Composer navrhuje změnu v `docs/`, zkontroluj, že negeneruje changelog-drift
+- Pro refaktor, který mění API, dej Composerovi instrukci „po dokončení aktualizuj DESCRIPTION.md, ale nepiš do něj historii — jen nový stav"
+- Pro nový task otevři Composer s context-includem `tasks/<EPIC>/README.md` a `tasks/<EPIC>/spec/` (ne celé `tasks/`)
+
+## Co v rule NEzmiňovat (aby rule neprouteboval kontext)
+
+Tento `.mdc` soubor záměrně obsahuje jen pravidla a odkazy. Pokud chceš víc detailů:
+
+- Antipatterny → `CLAUDE.md` v rootu, nebo online dokumentace docs-plugin
+- Frontmatter schémata → `CLAUDE.md` v rootu
+- ADR template → `docs/architecture/decisions/README.md`

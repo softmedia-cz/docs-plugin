@@ -1,0 +1,15 @@
+# Materials from the lecture (not part of the plugin distribution)
+podklady-z-prednasky/
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Claude / scratch
+.claude/
+scratch/
+.working/
