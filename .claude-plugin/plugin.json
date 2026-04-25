@@ -17,8 +17,5 @@
     "url": "https://softmedia.cz"
   },
   "homepage": "https://github.com/softmedia-cz/docs-plugin",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/softmedia-cz/docs-plugin.git"
-  }
+  "repository": "https://github.com/softmedia-cz/docs-plugin.git"
 }
