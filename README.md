@@ -20,6 +20,7 @@ Plugin automatizuje dokumentační workflow podle metodiky `docs-process`, ktero
 | **Command `/doc-update`** | Inkrementální aktualizace pro zadaný adresář, **nebo `--all` driftscan** napříč repem s paralelní opravou. |
 | **Command `/doc-status`** | Read-only drift report (text/json). Zdarmo, deterministické — vhodné do hooků a CI. |
 | **Command `/doc-revise`** | Kompletní přepis dokumentace (po refaktoru nebo dlouhém období bez údržby). |
+| **MCP server `ReadTheDocs`** | Bundlovaný, auto-registrovaný. Čte dokumentaci jako agregované balíčky: `docs_for_code`, `docs_topic`, `docs_concept`, `docs_adr`. Čistý Node bez závislostí, read-only. |
 | **Hooky (volitelné)** | SessionStart (enable prompt / drift reminder), Stop, post-merge (drift check po `git pull`), pre-commit. Levné, deterministické (mtime), žádné LLM volání. |
 | **Šablony** | `CLAUDE.md`, `AGENTS.md`, cursor rule, `.codex/prompts/`, `settings.json`, hooky, prázdný docs/, tasks/, ukázkový DESCRIPTION.md. |
 
@@ -105,6 +106,11 @@ docs-plugin/
 ├── .claude-plugin/
 │   ├── plugin.json
 │   └── marketplace.json         # repo je zároveň single-plugin marketplace
+├── .mcp.json                    # auto-registrace ReadTheDocs MCP serveru
+├── mcp/
+│   └── readthedocs/
+│       ├── index.js             # MCP server (čistý Node, bez závislostí)
+│       └── README.md
 ├── skills/
 │   └── docs-plugin/
 │       ├── SKILL.md              # hlavní skill s filosofií
@@ -144,7 +150,11 @@ docs-plugin/
 5. **`@docs/*` odkazy v `CLAUDE.md` jsou antipattern** — agent si najde cestu přes konvenci.
 6. **`MODULES.md` je auto-generovaný** — nikdy neupravovat ručně.
 
-## Co je nové v 0.2
+## Co je nové v 0.3
+
+- **MCP server `ReadTheDocs`** — bundlovaný, auto-registrovaný přes `.mcp.json`. Agent čte dokumentaci jako agregované balíčky (`docs_for_code`, `docs_topic`, `docs_concept`, `docs_adr`) místo ručního globování. Čistý Node bez závislostí, read-only, deterministický. Viz `mcp/readthedocs/README.md`.
+
+## Co bylo nové v 0.2
 
 - **Autodetekce v `/docs-init`** — stack, ticket systém, jazyk i platformy se detekují; otázka jen při ambiguitě.
 - **Bulk generování** — `/docs-init` po vytvoření kostry paralelně vygeneruje `DESCRIPTION.md` napříč moduly.
@@ -154,10 +164,10 @@ docs-plugin/
 
 ## Co plugin NEobsahuje (a proč)
 
-- **MCP server `ReadTheDocs`** — zmíněný v přednášce, ale není součástí tohoto pluginu (scope: skill + commandy + agent). Dá se dostavět samostatně (PowerShell, Python, TS), plugin poskytuje kontrakt (viz `skills/docs-plugin/references/portability.md`).
 - **`api_hash` přesná implementace** — drift detekce v hookích používá levnou mtime heuristiku; přesný `api_hash` počítá `docs-updater` subagent přes LLM extrakci veřejného API. Plně deterministický jazykově-specifický parser (Roslyn/ts-morph/ast) je projektově specifický.
+- **`ReadTheDocs` cache / sémantické hledání** — server zatím skenuje filesystem on-demand a `docs_concept` je substring match. Pre-index a fuzzy/embedding hledání jsou roadmapa.
 
-Tyto komponenty jsou **roadmapa v0.3+**.
+Tyto komponenty jsou **roadmapa v0.4+**.
 
 ## Kompatibilita
 

@@ -1,7 +1,7 @@
 {
   "name": "docs-plugin",
-  "version": "0.2.0",
-  "description": "Agent-driven strukturovaná dokumentace pro repozitáře. Autodetekce + bulk generování DESCRIPTION.md, drift detekce, volitelné hooky (enable prompt, post-merge refresh). Odděluje AS IS (docs/) od TO BE (tasks/), škáluje od malých projektů po multimilionové codebase. Skill, subagent docs-updater, commandy /docs-init, /doc-update, /doc-status, /doc-revise.",
+  "version": "0.3.0",
+  "description": "Agent-driven strukturovaná dokumentace pro repozitáře. Autodetekce + bulk generování DESCRIPTION.md, drift detekce, MCP server ReadTheDocs pro agregované čtení docs, volitelné hooky. Odděluje AS IS (docs/) od TO BE (tasks/), škáluje od malých projektů po multimilionové codebase. Skill, subagent docs-updater, commandy /docs-init, /doc-update, /doc-status, /doc-revise.",
   "keywords": [
     "documentation",
     "docs",
@@ -12,7 +12,8 @@
     "as-is",
     "to-be",
     "drift-detection",
-    "agent-driven"
+    "agent-driven",
+    "mcp"
   ],
   "author": {
     "name": "Softmedia.cz",
