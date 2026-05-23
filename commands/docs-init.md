@@ -421,25 +421,47 @@ last_updated: <YYYY-MM-DD>
 
 ### 6.7 Volitelné: install hooks
 
-Pokud user passnul `--install-hooks` (nebo na interaktivní otázku odpověděl ano), nainstaluj `templates/settings.json` šablonu do `<repo>/.claude/settings.json`. Hooky:
+Pokud user passnul `--install-hooks` (nebo na interaktivní otázku odpověděl ano), nainstaluj hookovou sadu. Tři komponenty:
 
-- **SessionStart hook** — při startu session vypíše subtilní reminder, pokud nějaké moduly jsou v driftu (`💡 docs-plugin: 7 modulů v driftu...`).
-- **Stop hook** — po skončení session, pokud byly edity v `src/`/`app/`/`lib/`/`packages/`, varuje na drift a navrhne `/doc-update --all`.
+1. **Helper script** `templates/hooks/docs-plugin-check.sh` → `<repo>/.claude/hooks/docs-plugin-check.sh` (`chmod +x`). Čistě deterministická mtime heuristika — **žádné LLM volání, žádné tokeny**.
+2. **`templates/settings.json`** → `<repo>/.claude/settings.json` (SessionStart + Stop hooky volající helper).
+3. **`templates/hooks/post-merge-doc-refresh`** → `<repo>/.git/hooks/post-merge` (`chmod +x`). Po `git pull` levný drift check + nabídka.
 
-**NEINSTALUJ hooky automaticky.** Default chování `/docs-init` je hooky **neinstalovat**, protože:
+Co hooky dělají:
+
+- **SessionStart** — při startu session: pokud repo používá docs-plugin a je možný drift, připomene. Pokud repo docs-plugin **nepoužívá** ale má zdrojáky, **nabídne `/docs-init`** (tj. „first-message enable prompt"). Respektuje `.claude/.docs-plugin-declined`.
+- **Stop** — po editech v `src/`/`app/`/`lib/`/`packages/` připomene možný drift.
+- **post-merge** — po `git pull`/`merge` levný check + nabídka `/doc-update --all`. **Neregeneruje automaticky** (volba „levný check + nabídka").
+
+**NEINSTALUJ hooky automaticky.** Default `/docs-init` je hooky **neinstalovat**, protože:
 
 - Můžou rozbít CI / non-interaktivní běhy (`claude --print` apod.).
-- Volání `claude /doc-status` z hooku spustí novou session — uživatel musí být ochotný za to platit (token cost minimální, ale nekontrolované volání může překvapit).
-- Rozdělení zodpovědnosti: drift detekce může být i v pre-commit hooku (viz `templates/hooks/pre-commit-doc-update`), CI lintu, nebo jen manuálně přes `/doc-status`.
+- Sdílený `.claude/settings.json` v repu ovlivní všechny členy týmu — to chce vědomé rozhodnutí.
 
 Postup pro instalaci:
 
-1. **Pokud `<repo>/.claude/settings.json` neexistuje**: zkopíruj šablonu z `templates/settings.json` (placeholdery není potřeba nahrazovat — settings.json je generic).
-2. **Pokud existuje**: **nemerguj automaticky**. Vypiš uživateli obsah šablony a poraď: *"Existující `.claude/settings.json` jsem nepřepsal. Šablonu najdeš v `<plugin>/templates/settings.json`, případně si ručně doplň `hooks.SessionStart` a `hooks.Stop` sekce."*
+1. Zkopíruj `docs-plugin-check.sh` do `<repo>/.claude/hooks/` a nastav `chmod +x`.
+2. Zkopíruj `post-merge-doc-refresh` do `<repo>/.git/hooks/post-merge` a nastav `chmod +x` (pozor: `.git/hooks/` se necommituje — je per-clone; zmiň uživateli, že po čerstvém clonu musí znovu).
+3. **Pokud `<repo>/.claude/settings.json` neexistuje**: zkopíruj `templates/settings.json` (generic, žádné placeholdery).
+4. **Pokud existuje**: **nemerguj automaticky**. Vypiš obsah šablony a poraď: *"Existující `.claude/settings.json` jsem nepřepsal. Doplň si `hooks.SessionStart` a `hooks.Stop` ručně."*
 
 Pokud user passnul `--no-hooks`, **nezeptej se** ani interaktivně — respektuj explicitní volbu.
 
-V interaktivním módu (žádný flag) **se zeptej** na konci `/docs-init`: *"Nainstalovat volitelné hooky pro drift reminders v session start/stop? [y/N]"* — default `N` (bezpečnější).
+V interaktivním módu (žádný flag) **se zeptej** na konci `/docs-init`: *"Nainstalovat volitelné hooky (drift reminders na session start/stop + po git pull)? [y/N]"* — default `N`.
+
+### 6.8 Epic vs. flat tasks/ — auto rozhodnutí
+
+`tasks/` (TO BE strana — `assignment.md`, `plan.md`, `changelog.md` per task) je **defaultně zapnutá**. Strukturu plugin **rozhoduje sám, neptá se**:
+
+- **Default: flat** `tasks/<TASK-KEY>/` — jednodušší, vhodné pro malé a střední projekty.
+- **Epic seskupení** `tasks/<EPIC-KEY>/<TASK-KEY>/` — když je signál, že projekt jede po větších celcích.
+
+Rozhodovací heuristika (mechanická):
+
+1. **Na začátku (`/docs-init`)** — pokud projekt vypadá velký (multi-module systém z 3.6, **nebo** ticket systém s epic konvencí jako Jira, **nebo** >15 modulů), založ rovnou epic-ready `tasks/` (s `tasks/template/epic/` i `tasks/template/task/`). Jinak flat.
+2. **Během vývoje** — když počet tasků ve flat `tasks/` naroste přes ~12, **nebo** je vidět, že víc tasků patří do jedné iniciativy (sdílený prefix klíče, např. `CF-101`, `CF-102`, `CF-103`), plugin při dalším task-create **navrhne migraci** na epic strukturu: přesune existující tasky pod `tasks/<EPIC>/` a dál zakládá tam. Migraci provede, jen pokud je jednoznačná; jinak nech flat.
+
+V obou případech to plugin **dělá sám** a v summary jen oznámí (*"tasks/ jsou flat — při >12 tascích nabídnu epic seskupení"* nebo *"detekoval jsem Jira + multi-module, zakládám epic-ready tasks/"*). Detaily viz `references/struktura.md` sekce *Epic auto-promotion*.
 
 ### 6.6 Bulk summary
 
@@ -539,7 +561,7 @@ Při kombinaci flagu + autodetekce: flag vyhrává pro své pole, ostatní pole 
 
 ### Hooky (sekce 6.7)
 
-- `--install-hooks` — nainstaluj `templates/settings.json` do `<repo>/.claude/settings.json` (SessionStart + Stop drift reminders)
+- `--install-hooks` — nainstaluj hookovou sadu: `.claude/hooks/docs-plugin-check.sh`, `.claude/settings.json` (SessionStart enable-prompt/drift + Stop), `.git/hooks/post-merge` (drift check po `git pull`)
 - `--no-hooks` — vypni interaktivní dotaz na hooky; nainstaluj NIC
 
 Bez flagu se v interaktivním módu commandy zeptá *"Nainstalovat hooky? [y/N]"* (default N).

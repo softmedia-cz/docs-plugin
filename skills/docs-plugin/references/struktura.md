@@ -50,22 +50,49 @@ docs/
 
 ## `tasks/` — TO BE
 
-Popisuje plánované změny, specifikace, rozhodovací historii tasků. **Cold storage — agent ho standardně nečte.**
+Popisuje plánované změny, specifikace, rozhodovací historii tasků. **Cold storage — agent ho standardně nečte.** Defaultně zapnutá.
+
+Struktura má **dvě formy** — plugin volí automaticky (viz *Epic auto-promotion* níže).
+
+### Flat (default, malé/střední projekty)
 
 ```
 tasks/
-├── README.md                           # pravidla, klíčování, šablony
-└── <EPIC-KEY>/                         # např. CF-100-EPIC, LIN-101, ISSUE-42
+├── README.md                           # pravidla, klíčování
+└── <TASK-KEY>/                         # např. CF-142, LIN-201, ISSUE-45
+    ├── assignment.md                   # zadání — co a proč
+    ├── plan.md                         # plán — jak
+    └── changelog.md                    # skutečně provedené změny
+```
+
+### Epic (velké projekty / iniciativy po více tascích)
+
+```
+tasks/
+├── README.md
+└── <EPIC-KEY>/                         # např. CF-100-EPIC, LIN-101
     ├── README.md                       # scope epiku, business cíle
     ├── spec/                           # TO BE specifikace celého epiku
     │   ├── overview.md
-    │   ├── requirements.md
     │   └── ...
-    └── <TASK-KEY>/                     # např. CF-142, LIN-201, subissue-3
-        ├── assignment.md               # zadání — co a proč (vstup)
-        ├── plan.md                     # plán — jak (vstup od agenta, review vývojářem)
-        └── changelog.md                # skutečně provedené změny (během implementace)
+    └── <TASK-KEY>/                     # např. CF-142
+        ├── assignment.md
+        ├── plan.md
+        └── changelog.md
 ```
+
+### Epic auto-promotion
+
+Plugin **rozhoduje sám, neptá se uživatele**:
+
+| Situace | Forma |
+|---|---|
+| Nové / malé repo | flat |
+| `/docs-init` detekoval multi-module systém, Jira, nebo >15 modulů | epic-ready od začátku |
+| Flat `tasks/` naroste přes ~12 tasků | promote na epic |
+| Víc tasků sdílí prefix klíče (`CF-101`, `CF-102`, …) a patří do jedné iniciativy | promote na epic |
+
+**Promote** = přesun existujících `tasks/<TASK>/` pod `tasks/<EPIC>/<TASK>/` + další tasky zakládat tam. Proveď, **jen když je seskupení jednoznačné**; jinak zůstaň flat. Po migraci uživateli oznam (nezastavuj se a neptej se předem).
 
 ### Naming convention pro klíče
 

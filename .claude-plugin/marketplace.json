@@ -11,8 +11,8 @@
     {
       "name": "docs-plugin",
       "source": "./",
-      "description": "Substrát pro strukturovanou dokumentaci v repozitářích. Odděluje AS IS (docs/) od TO BE (tasks/), škáluje rekurzivně. Skill, subagent docs-updater, slash commandy /docs-init, /doc-update, /doc-revise.",
-      "version": "0.1.0"
+      "description": "Agent-driven strukturovaná dokumentace: autodetekce, bulk generování DESCRIPTION.md, drift detekce, volitelné hooky. Skill, subagent docs-updater, commandy /docs-init, /doc-update, /doc-status, /doc-revise.",
+      "version": "0.2.0"
     }
   ]
 }

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#
+# post-merge-doc-refresh — git post-merge hook pro docs-plugin.
+#
+# Spustí se po `git pull` / `git merge`. Dělá LEVNÝ deterministický
+# drift check (žádné LLM volání, žádné tokeny) a při driftu jen vypíše
+# nabídku — regeneraci pustíš ručně přes /doc-update --all.
+#
+# Toto je úmyslně NEAGRESIVNÍ: nepřepisuje dokumentaci automaticky,
+# jen upozorní. (Volba "levný check + nabídka".)
+#
+# Instalace:
+#   cp templates/hooks/docs-plugin-check.sh   .claude/hooks/
+#   cp templates/hooks/post-merge-doc-refresh .git/hooks/post-merge
+#   chmod +x .git/hooks/post-merge .claude/hooks/docs-plugin-check.sh
+#
+# (/docs-init --install-hooks tohle udělá za tebe.)
+
+set -uo pipefail
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+CHECK="$ROOT/.claude/hooks/docs-plugin-check.sh"
+
+if [ -x "$CHECK" ]; then
+  "$CHECK" post-merge
+else
+  # Fallback: inline minimální check, pokud helper není nainstalovaný.
+  cd "$ROOT" || exit 0
+  stale=0
+  while IFS= read -r desc; do
+    [ -z "$desc" ] && continue
+    dir="$(dirname "$desc")"
+    if find "$dir" -maxdepth 1 -type f \
+      \( -name '*.ts' -o -name '*.py' -o -name '*.go' -o -name '*.rs' -o -name '*.cs' \) \
+      -newer "$desc" 2>/dev/null | head -1 | grep -q .; then
+      stale=$((stale + 1))
+    fi
+  done < <(find . -path ./node_modules -prune -o -path ./.git -prune -o -name DESCRIPTION.md -print 2>/dev/null)
+  if [ "$stale" -gt 0 ]; then
+    echo "💡 docs-plugin: po pullu má $stale modulů možný drift. Spusť /doc-update --all."
+  fi
+fi
+
+exit 0

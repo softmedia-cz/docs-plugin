@@ -95,14 +95,35 @@ Když uživatel žádá „napiš specifikaci podle [jejich metodiky]", použív
 
 Pro automatizaci: viz `/doc-update <path>` (inkrementální) nebo `/doc-revise <path>` (kompletní přepis).
 
-### Uživatel chce začít nový epic / task
+### Uživatel chce začít nový task (a TO BE flow obecně)
 
-1. Zjisti klíč epiku/tasku (Jira/Linear/GH Issues/vlastní)
-2. Vytvoř `tasks/<EPIC-KEY>/` pokud ještě neexistuje, s `README.md` (scope epiku) a `spec/` (TO BE)
-3. Vytvoř `tasks/<EPIC-KEY>/<TASK-KEY>/` se třemi soubory:
-   - `assignment.md` — co a proč (vstup od analytika/PM)
-   - `plan.md` — jak to budeš dělat (vstup od agenta, připomínkuje vývojář)
-   - `changelog.md` — co se skutečně udělalo (píše se během implementace)
+`tasks/` je **defaultně zapnutá**. Struktura je **flat nebo epic — rozhoduješ ty, neptáš se** (viz *Epic auto-promotion* níže).
+
+1. Zjisti klíč tasku (Jira/Linear/GH Issues/vlastní).
+2. Urči cílovou cestu:
+   - **Flat** (default): `tasks/<TASK-KEY>/`
+   - **Epic** (když je repo epic-ready nebo task patří do existující iniciativy): `tasks/<EPIC-KEY>/<TASK-KEY>/`
+3. Vytvoř task se třemi soubory:
+   - `assignment.md` — co a proč
+   - `plan.md` — jak to budeš dělat
+   - `changelog.md` — co se skutečně udělalo (průběžně během implementace)
+
+#### Smooth flow — minimalizuj přerušování
+
+Cíl je **míň odsouhlasování během práce**. Když začínáš implementační task:
+
+1. **Auto-založ `assignment.md`** z toho, co ti uživatel řekl (přepiš jeho zadání do struktury — co, proč, acceptance criteria). Neptej se na detaily, které lze odvodit.
+2. **Auto-napiš `plan.md`** — tvůj návrh postupu. Ukaž ho uživateli, ale **needržkuj na schválení každého kroku** — pokud je plán rozumný a task není destruktivní, pokračuj. Plán je záznam intentu, ne approval gate.
+3. **Při zásadním architektonickém rozhodnutí auto-založ ADR** (`docs/architecture/decisions/`) se `status: proposed`. Tím se rozhodnutí zachytí dopředu a nemusíš se vracet a ptát uprostřed práce.
+4. **Průběžně doplňuj `changelog.md`** — bez ptaní.
+
+Pravidlo: vždy uživateli **ukaž**, co jsi založil (assignment/plan/ADR), ale **blokuj jen u nevratných / destruktivních kroků** (migrace dat, mazání, deploy). Dokumentace a plán nejsou destruktivní → proceed.
+
+#### Epic auto-promotion
+
+- **Flat default.** Nové repo / malý projekt → `tasks/<TASK-KEY>/`.
+- **Epic-ready od začátku**, pokud `/docs-init` detekoval velký projekt (multi-module, Jira, >15 modulů).
+- **Promote za běhu**: když flat `tasks/` má přes ~12 tasků **nebo** víc tasků sdílí prefix klíče (`CF-101`, `CF-102`, …), přesuň je pod `tasks/<EPIC>/` a dál zakládej tam. **Dělej to sám, jen když je seskupení jednoznačné**; jinak zůstaň flat. Po migraci to uživateli oznam (nezastavuj se a neptej).
 
 Detaily schématu viz `references/struktura.md`.
 
@@ -136,6 +157,15 @@ superseded_by: ADR-OOO
 ### Repo ještě nemá docs-plugin strukturu
 
 Pusť `/docs-init` (vytvoří `docs/`, `tasks/`, `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/docs-plugin.mdc`).
+
+#### Enable prompt (nabídka při startu)
+
+Pokud je nainstalovaný SessionStart hook (`docs-plugin-check.sh`), injektuje při startu session do kontextu nabídku, když repo **má zdrojáky, ale nepoužívá docs-plugin**. Když tohle vidíš, **v první odpovědi se uživatele zeptej**: *„Vidím, že tu zatím není dokumentace. Chceš ji tu zavést přes docs-plugin? Vygeneruju `DESCRIPTION.md` u kódu a budu hlídat drift."*
+
+- **Uživatel ano** → pusť `/docs-init` (autodetekce + bulk generování).
+- **Uživatel ne** → vytvoř `.claude/.docs-plugin-declined` (prázdný soubor), ať se nabídka víc neukazuje. Řekni mu, že to může kdykoliv zapnout přes `/docs-init`.
+
+Tohle pokrývá obě varianty stejně: nový projekt (start od nuly) i existující kód bez dokumentace — flow je identický, liší se jen tím, kolik kódu už `/docs-init` najde k zdokumentování.
 
 ## Detekce substrate-konformního repa
 

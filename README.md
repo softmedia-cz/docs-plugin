@@ -16,10 +16,12 @@ Plugin automatizuje dokumentační workflow podle metodiky `docs-process`, ktero
 |---|---|
 | **Skill `docs-plugin`** | Naučí Claude Code metodiku. Trigguje se automaticky, když uživatel pracuje s dokumentací. |
 | **Subagent `docs-updater`** | Izolovaný agent pro aktualizaci `DESCRIPTION.md` / `MODULES.md`. Tvrdá pravidla proti changelog-drift. |
-| **Command `/docs-init`** | Inicializuje substrate strukturu v novém nebo existujícím repu. Generuje `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/`. |
-| **Command `/doc-update`** | Inkrementální aktualizace dokumentace pro zadaný adresář. |
+| **Command `/docs-init`** | Inicializuje strukturu s **autodetekcí** (stack, ticket systém, jazyk, platformy — žádné otázky) a **bulk vygeneruje `DESCRIPTION.md`** napříč moduly paralelně. |
+| **Command `/doc-update`** | Inkrementální aktualizace pro zadaný adresář, **nebo `--all` driftscan** napříč repem s paralelní opravou. |
+| **Command `/doc-status`** | Read-only drift report (text/json). Zdarmo, deterministické — vhodné do hooků a CI. |
 | **Command `/doc-revise`** | Kompletní přepis dokumentace (po refaktoru nebo dlouhém období bez údržby). |
-| **Šablony** | `CLAUDE.md`, `AGENTS.md`, cursor rule, prázdný docs/, tasks/, ukázkový DESCRIPTION.md. |
+| **Hooky (volitelné)** | SessionStart (enable prompt / drift reminder), Stop, post-merge (drift check po `git pull`), pre-commit. Levné, deterministické (mtime), žádné LLM volání. |
+| **Šablony** | `CLAUDE.md`, `AGENTS.md`, cursor rule, `.codex/prompts/`, `settings.json`, hooky, prázdný docs/, tasks/, ukázkový DESCRIPTION.md. |
 
 ## Instalace
 
@@ -101,28 +103,31 @@ Agent použije šablony z `tasks/template/` a vytvoří `tasks/CF-100-EPIC/CF-14
 ```
 docs-plugin/
 ├── .claude-plugin/
-│   └── plugin.json
+│   ├── plugin.json
+│   └── marketplace.json         # repo je zároveň single-plugin marketplace
 ├── skills/
 │   └── docs-plugin/
 │       ├── SKILL.md              # hlavní skill s filosofií
 │       └── references/
-│           ├── struktura.md           # adresářové schéma + frontmatter
+│           ├── struktura.md           # adresářové schéma + frontmatter + epic auto-promotion
 │           ├── pravidla-aktualizace.md # kdo co aktualizuje kdy
 │           ├── antipatterny.md        # co NEdělat
 │           └── portability.md         # Codex, Cursor, Gemini, Aider
 ├── agents/
 │   └── docs-updater.md          # subagent pro aktualizaci .md souborů
 ├── commands/
-│   ├── docs-init.md             # /docs-init
-│   ├── doc-update.md            # /doc-update
+│   ├── docs-init.md             # /docs-init (autodetekce + bulk)
+│   ├── doc-update.md            # /doc-update (+ --all driftscan)
+│   ├── doc-status.md            # /doc-status (read-only drift report)
 │   └── doc-revise.md            # /doc-revise
 ├── templates/
 │   ├── CLAUDE.md                # šablona pro repo CLAUDE.md
 │   ├── AGENTS.md                # šablona pro repo AGENTS.md (Codex)
 │   ├── cursor-rule/
-│   │   └── docs-plugin.mdc   # šablona pro .cursor/rules/
+│   │   └── docs-plugin.mdc      # šablona pro .cursor/rules/
 │   ├── .codex/prompts/          # prompt šablony pro Codex (ekvivalent slash commandů)
-│   ├── hooks/                   # vzorové git hooky (pre-commit doc-update)
+│   ├── settings.json            # volitelné CC hooky (SessionStart/Stop)
+│   ├── hooks/                   # docs-plugin-check.sh, post-merge, pre-commit
 │   └── tree/                    # prázdná skeleton struktura
 │       ├── docs/...
 │       ├── tasks/...
@@ -139,13 +144,20 @@ docs-plugin/
 5. **`@docs/*` odkazy v `CLAUDE.md` jsou antipattern** — agent si najde cestu přes konvenci.
 6. **`MODULES.md` je auto-generovaný** — nikdy neupravovat ručně.
 
+## Co je nové v 0.2
+
+- **Autodetekce v `/docs-init`** — stack, ticket systém, jazyk i platformy se detekují; otázka jen při ambiguitě.
+- **Bulk generování** — `/docs-init` po vytvoření kostry paralelně vygeneruje `DESCRIPTION.md` napříč moduly.
+- **Drift detekce** — `/doc-update --all` (oprava) a `/doc-status` (read-only report) napříč celým repem.
+- **Hooky** — SessionStart enable prompt + drift reminder, post-merge check po `git pull`, Stop reminder. Levné, deterministické.
+- **Epic auto-promotion** — `tasks/` je flat, plugin sám přejde na epic seskupení, když projekt naroste.
+
 ## Co plugin NEobsahuje (a proč)
 
 - **MCP server `ReadTheDocs`** — zmíněný v přednášce, ale není součástí tohoto pluginu (scope: skill + commandy + agent). Dá se dostavět samostatně (PowerShell, Python, TS), plugin poskytuje kontrakt (viz `skills/docs-plugin/references/portability.md`).
-- **Pre-commit hooky** — jen návrhová šablona v `references/pravidla-aktualizace.md`. Konkrétní implementace závisí na tech stacku.
-- **`api_hash` implementace** — návrh v `references/pravidla-aktualizace.md`, konkrétní jazykové implementace (C#/Python/TS/Rust) jsou projektově specifické.
+- **`api_hash` přesná implementace** — drift detekce v hookích používá levnou mtime heuristiku; přesný `api_hash` počítá `docs-updater` subagent přes LLM extrakci veřejného API. Plně deterministický jazykově-specifický parser (Roslyn/ts-morph/ast) je projektově specifický.
 
-Tyto komponenty jsou **roadmapa v0.2+**.
+Tyto komponenty jsou **roadmapa v0.3+**.
 
 ## Kompatibilita
 
