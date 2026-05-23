@@ -66,7 +66,12 @@ last_updated: YYYY-MM-DD
 - Historie rozhodnutí → `docs/architecture/decisions/`
 - Rozpracovaný task → `tasks/<EPIC>/<TASK>/` (jen na vyžádání!)
 
-Pokud je nainstalován MCP server `ReadTheDocs`, používej ho pro agregované vyhledávání (`topic`, `forCode`, `concept`, `adr`).
+S nainstalovaným docs-plugin máš MCP server `ReadTheDocs` — **používej ho přednostně** pro agregované čtení dokumentace:
+
+- `docs_for_code(forCode: "src/X/Y")` — DESCRIPTION.md + MODULES.md + docs/modules/ k té cestě
+- `docs_topic(topic: "architecture"|"reference", module?: "x")` — architektura/reference modulu nebo systému
+- `docs_concept(concept: "...")` — fulltext napříč docs/ a DESCRIPTION.md
+- `docs_adr(topics?: ["tag"])` — Architecture Decision Records
 
 ## Slash commandy (Claude Code)
 

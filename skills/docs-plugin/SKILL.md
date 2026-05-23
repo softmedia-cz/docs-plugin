@@ -129,7 +129,7 @@ Detaily schématu viz `references/struktura.md`.
 
 ### Uživatel chce přečíst dokumentaci nějaké části
 
-1. Pokud existuje MCP server `ReadTheDocs`, použij ho (`topic:`, `forCode:`, `concept:`, `adr:`)
+1. Pokud existuje MCP server `ReadTheDocs` (součást docs-plugin), **použij ho přednostně** — nástroje `docs_for_code`, `docs_topic`, `docs_concept`, `docs_adr`
 2. Pokud ne, hledej podle konvence:
    - Otázka na architekturu → `docs/architecture/` nebo `docs/modules/<X>/architecture/`
    - Otázka na API / „co dělá tenhle kód" → `DESCRIPTION.md` vedle kódu

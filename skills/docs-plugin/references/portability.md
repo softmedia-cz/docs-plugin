@@ -126,7 +126,7 @@ Substrate stojí na **filesystem-level konvencích**:
 | `/doc-update` | ✅ slash cmd | ⚠️ prompt | ⚠️ composer | ⚠️ alias | ⚠️ manuál |
 | `/doc-revise` | ✅ slash cmd | ⚠️ prompt | ⚠️ composer | ⚠️ alias | ⚠️ manuál |
 | docs-updater subagent | ✅ isolated | ❌ inline | ❌ inline | ❌ inline | ❌ inline |
-| ReadTheDocs MCP | ✅ (až bude) | ✅ (MCP) | ⚠️ limited | ❌ | ❌ |
+| ReadTheDocs MCP | ✅ (bundled) | ✅ (MCP, sdílený server) | ⚠️ limited | ❌ | ❌ |
 | Filesystem konvence | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 Legenda: ✅ nativně, ⚠️ s workaroundem, ❌ nedostupné.
