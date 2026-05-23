@@ -1,0 +1,5 @@
+[project]
+name = "fixture-polyglot-backend"
+version = "0.1.0"
+description = "Backend half of the polyglot fixture"
+requires-python = ">=3.11"

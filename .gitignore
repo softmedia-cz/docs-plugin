@@ -13,3 +13,16 @@ podklady-z-prednasky/
 .claude/
 scratch/
 .working/
+
+# Test fixture runtime state — created by tests/run-tests.sh, not part of the source
+tests/fixtures/**/.git/
+tests/fixtures/**/docs/
+tests/fixtures/**/tasks/
+tests/fixtures/**/CLAUDE.md
+tests/fixtures/**/AGENTS.md
+tests/fixtures/**/GEMINI.md
+tests/fixtures/**/.cursor/
+tests/fixtures/**/.codex/
+tests/fixtures/**/.gitignore
+tests/fixtures/**/.doc-revise-backup/
+tests/fixtures/**/.doc-update-cache/

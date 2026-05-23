@@ -1,0 +1,34 @@
+{
+  "//": "Volitelné docs-plugin hooky pro Claude Code. Nainstaluj přes /docs-init --install-hooks nebo zkopíruj ručně do .claude/settings.json.",
+  "//purpose": "SessionStart: pokud repo používá docs-plugin a je drift, připomene; pokud NEpoužívá a má zdrojáky, nabídne /docs-init. Stop: po editech v src/ připomene drift.",
+  "//cheap": "Hooky volají .claude/hooks/docs-plugin-check.sh — čistě deterministická mtime heuristika, ŽÁDNÉ LLM volání, žádné tokeny. Přesná kontrola je /doc-status, oprava /doc-update --all.",
+  "//caveat": "Hooky jsou volitelné. Helper script musí být v .claude/hooks/docs-plugin-check.sh (zkopíruje /docs-init --install-hooks).",
+
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/docs-plugin-check.sh session-start 2>/dev/null || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if git rev-parse --git-dir >/dev/null 2>&1 && [ \"$(git diff --name-only HEAD 2>/dev/null | grep -cE '^(src|app|lib|packages)/')\" -gt 0 ]; then bash .claude/hooks/docs-plugin-check.sh session-start 2>/dev/null || true; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
